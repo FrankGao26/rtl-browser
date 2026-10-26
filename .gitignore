@@ -1,0 +1,14 @@
+.sandbox/
+.vscode/
+build/
+dist/
+node_modules/
+state/
+.rtlb/
+*.tmp
+*.log
+*.rtlbsnap
+work/
+/examples/*
+!/examples/axi-crossbar/
+!/examples/pulp-axi/

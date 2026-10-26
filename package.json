@@ -1,0 +1,31 @@
+{
+  "name": "rtl-browser",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:web": "vite build --config apps/web/vite.config.ts",
+    "build": "npm run build:server && npm run build:web",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "check:env": "node tools/dev/check-env.mjs",
+    "test": "node tests/contracts.mjs && node tests/integration.mjs",
+    "serve": "node dist/server/apps/server/src/main.js"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "playwright-core": "1.64.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  }
+}

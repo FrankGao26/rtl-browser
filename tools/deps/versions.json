@@ -1,0 +1,18 @@
+{
+  "nodeVersion": "24.22.1",
+  "nodeLinuxX64Url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.xz",
+  "nodeLinuxX64Sha256": "6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6",
+  "nodeWindowsX64Url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-win-x64.zip",
+  "nodeWindowsX64Sha256": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5",
+  "nodeDarwinArm64Url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-darwin-arm64.tar.gz",
+  "nodeDarwinArm64Sha256": "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",
+  "sqliteVersion": "3.45.1",
+  "sqliteUrl": "https://www.sqlite.org/2024/sqlite-amalgamation-3450100.zip",
+  "sqliteSha256": "5592243caf28b2cdef41e6ab58d25d653dfc53deded8450eb66072c929f030c4",
+  "nlohmannJsonVersion": "3.11.3",
+  "nlohmannJsonUrl": "https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp",
+  "nlohmannJsonSha256": "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6",
+  "slangVersion": "12.0.0",
+  "slangCommit": "545f88b2ed3a2d20325fbd17413af177a6bca72f",
+  "slangRepository": "https://github.com/MikePopoloski/slang.git"
+}

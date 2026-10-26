@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rtl-browser.local/schema/build-request.schema.json",
+  "title": "BuildRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion", "jobId", "projectId", "configRef", "outputRef",
+    "requiredCapabilities", "requestKey"
+  ],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "jobId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "projectId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "configRef": { "type": "string", "minLength": 1 },
+    "outputRef": { "type": "string", "minLength": 1 },
+    "requiredCapabilities": {
+      "type": "array",
+      "items": { "$ref": "capabilities.schema.json#/$defs/capability" },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "requestKey": { "type": "string", "minLength": 1, "maxLength": 256 }
+  }
+}

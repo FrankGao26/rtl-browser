@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rtl-browser.local/schema/build-config.schema.json",
+  "title": "BuildConfig",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion", "projectId", "name", "projectRoot", "inputMode",
+    "workingDirectory", "topMode", "topModule", "sourceRoots",
+    "defines", "includeRoots", "libraries", "parameters", "singleUnit",
+    "threads", "warningAsError", "warningOptions", "configRevision", "configDigest"
+  ],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "projectId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "projectRoot": { "type": "string", "minLength": 1 },
+    "inputMode": { "enum": ["filelist", "sources"] },
+    "filelistPath": { "type": "string", "minLength": 1 },
+    "filelistMode": { "enum": ["-f", "-F"] },
+    "sourcePaths": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 100000
+    },
+    "workingDirectory": { "type": "string", "minLength": 1 },
+    "topMode": { "enum": ["explicit", "automatic"] },
+    "topModule": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "sourceRoots": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "maxItems": 128
+    },
+    "defines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "value": { "type": ["string", "null"], "maxLength": 4096 }
+        }
+      },
+      "maxItems": 10000
+    },
+    "includeRoots": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 10000
+    },
+    "libraries": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 10000
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "value"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "value": { "type": "string", "maxLength": 4096 }
+        }
+      },
+      "maxItems": 10000
+    },
+    "language": { "type": ["string", "null"], "maxLength": 64 },
+    "singleUnit": { "type": "boolean" },
+    "threads": { "type": "integer", "minimum": 1, "maximum": 64 },
+    "warningAsError": { "type": "boolean" },
+    "warningOptions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 },
+      "maxItems": 256
+    },
+    "configRevision": { "type": "integer", "minimum": 1 },
+    "configDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "inputMode": { "const": "filelist" } } },
+      "then": { "required": ["filelistPath", "filelistMode"] }
+    },
+    {
+      "if": { "properties": { "inputMode": { "const": "sources" } } },
+      "then": { "required": ["sourcePaths"] }
+    }
+  ]
+}

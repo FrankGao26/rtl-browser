@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rtl-browser.local/schema/manifest.schema.json",
+  "title": "SnapshotManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "protocolVersion", "extractorVersion", "compilerVersion",
+    "compilerCommit", "snapshotId", "projectId", "jobId", "createdAt",
+    "configDigest", "rootInstanceId", "rootPath", "topModule", "capabilities",
+    "capabilityComplete", "counts", "sources", "indexSha256", "status"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "protocolVersion": { "const": 1 },
+    "extractorVersion": { "type": "string" },
+    "compilerVersion": { "type": "string" },
+    "compilerCommit": { "type": "string" },
+    "snapshotId": { "type": "string", "minLength": 1 },
+    "projectId": { "type": "string", "minLength": 1 },
+    "jobId": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string" },
+    "configDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "rootInstanceId": { "type": "string", "pattern": "^[0-9]+$" },
+    "rootPath": { "type": "string" },
+    "topModule": { "type": "string" },
+    "capabilities": {
+      "type": "array",
+      "items": { "$ref": "capabilities.schema.json#/$defs/capability" }
+    },
+    "capabilityComplete": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "capabilities.schema.json#/$defs/capabilityStatus"
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 },
+      "required": ["instances", "symbols", "occurrences", "drivers", "loads", "sources"]
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "displayPath", "sha256", "bytes"],
+        "properties": {
+          "sourceId": { "type": "string", "pattern": "^[0-9]+$" },
+          "displayPath": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "encoding": { "type": "string" }
+        }
+      }
+    },
+    "indexSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "enum": ["READY", "COMPLETE"] }
+  }
+}

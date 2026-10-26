@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rtl-browser.local/schema/capabilities.schema.json",
+  "title": "Capabilities",
+  "$defs": {
+    "capability": {
+      "enum": [
+        "hierarchy",
+        "resolved-symbols",
+        "types-values",
+        "drivers-bit-mapping",
+        "loads-direct-dependencies",
+        "preprocessor-provenance",
+        "definition-links",
+        "source-snapshot"
+      ]
+    },
+    "capabilityStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["present", "complete", "reason"],
+      "properties": {
+        "present": { "type": "boolean" },
+        "complete": { "type": "boolean" },
+        "reason": { "type": ["string", "null"], "maxLength": 4096 }
+      }
+    }
+  }
+}

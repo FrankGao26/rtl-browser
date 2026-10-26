@@ -1,0 +1,23 @@
+{
+  "protocolVersion": 1,
+  "capabilities": [
+    "hierarchy",
+    "resolved-symbols",
+    "types-values",
+    "drivers-bit-mapping",
+    "loads-direct-dependencies",
+    "preprocessor-provenance",
+    "definition-links",
+    "source-snapshot"
+  ],
+  "partialByDesign": [
+    "loads-direct-dependencies"
+  ],
+  "deferred": [
+    "interface/modport/inout bit mapping",
+    "function-body transitive reads",
+    "dynamic-index exact bit mapping",
+    "subtree snapshot export",
+    "semantic incremental build"
+  ]
+}

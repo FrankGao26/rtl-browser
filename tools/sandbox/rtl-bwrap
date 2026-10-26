@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# Copyright 2026 Frank Gao
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Project-private bubblewrap launcher.
+#
+# Usage:
+#   rtl-bwrap [--profile bootstrap|build|test|run|edit] [--network online|offline]
+#             [--project DIR] [--input DIR]... -- COMMAND [ARGS...]
+#
+# The project is mounted at /work. Host HOME is never mounted. Only explicitly
+# listed project subdirectories are writable. This script never uses eval or a
+# shell to assemble the bwrap invocation.
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+PROJECT="${RTL_PROJECT:-$ROOT}"
+PROFILE="build"
+NETWORK="online"
+INPUT_ROOTS=()
+
+die() { printf 'rtl-bwrap: %s\n' "$*" >&2; exit 2; }
+
+while (($#)); do
+  case "$1" in
+    --profile)   [[ $# -ge 2 ]] || die "--profile needs a value"; PROFILE="$2"; shift 2 ;;
+    --network)   [[ $# -ge 2 ]] || die "--network needs a value"; NETWORK="$2"; shift 2 ;;
+    --project)   [[ $# -ge 2 ]] || die "--project needs a value"; PROJECT="$2"; shift 2 ;;
+    --input)     [[ $# -ge 2 ]] || die "--input needs a value"; INPUT_ROOTS+=("$2"); shift 2 ;;
+    --)          shift; break ;;
+    *)           break ;;
+  esac
+done
+
+command -v bwrap >/dev/null 2>&1 || die "bwrap not found"
+[[ -x /usr/bin/bwrap ]] || die "/usr/bin/bwrap not executable"
+case "$PROFILE" in bootstrap|build|test|run|edit) ;; *) die "unknown profile: $PROFILE" ;; esac
+case "$NETWORK" in online|offline) ;; *) die "unknown network mode: $NETWORK" ;; esac
+
+PROJECT="$(cd -- "$PROJECT" && pwd -P)"
+[[ -d "$PROJECT" ]] || die "project not found: $PROJECT"
+
+for d in .sandbox/home .sandbox/cache .sandbox/config .sandbox/data .sandbox/tmp \
+         .sandbox/deps .sandbox/run .sandbox/evidence build state dist node_modules; do
+  mkdir -p "$PROJECT/$d"
+done
+
+# Keep tool configuration project-private and deterministic.
+: >"$PROJECT/.sandbox/config/gitconfig"
+: >"$PROJECT/.sandbox/config/npmrc"
+
+NODE_VER="$(sed -n 's/.*"nodeVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PROJECT/tools/deps/versions.json" | head -1)"
+NODE_BIN="/work/.sandbox/deps/node-v${NODE_VER}-linux-x64/bin"
+if [[ -n "$NODE_VER" && -d "$PROJECT/.sandbox/deps/node-v${NODE_VER}-linux-x64/bin" ]]; then
+  SANDBOX_PATH="$NODE_BIN:/usr/bin:/bin"
+else
+  SANDBOX_PATH="/usr/bin:/bin"
+fi
+
+BWRAP=(/usr/bin/bwrap
+  --unshare-user --unshare-pid --unshare-ipc --unshare-uts --unshare-cgroup-try
+  --die-with-parent --new-session --cap-drop ALL
+  --clearenv
+  --ro-bind /usr /usr
+  --symlink usr/lib /lib --symlink usr/lib64 /lib64
+  --symlink usr/bin /bin --symlink usr/sbin /sbin
+  --ro-bind-try /etc/ld.so.cache /etc/ld.so.cache
+  --ro-bind-try /etc/ld.so.conf /etc/ld.so.conf
+  --ro-bind-try /etc/ld.so.conf.d /etc/ld.so.conf.d
+  --ro-bind-try /etc/alternatives /etc/alternatives
+  --ro-bind-try /etc/ssl /etc/ssl
+  --ro-bind-try /etc/ca-certificates /etc/ca-certificates
+  --ro-bind-try /etc/resolv.conf /etc/resolv.conf
+  --ro-bind-try /etc/hosts /etc/hosts
+  --ro-bind-try /etc/nsswitch.conf /etc/nsswitch.conf
+  --ro-bind-try /etc/passwd /etc/passwd
+  --ro-bind-try /etc/group /etc/group
+  --ro-bind-try /etc/localtime /etc/localtime
+  --ro-bind-try /etc/fonts /etc/fonts
+  --ro-bind-try /etc/services /etc/services
+  --ro-bind-try /etc/host.conf /etc/host.conf
+  --ro-bind-try /sys /sys
+  --proc /proc
+  --dev /dev
+  --tmpfs /dev/shm
+  --tmpfs /tmp
+  --tmpfs /home
+  --tmpfs /run
+  --dir /work
+  --dir /inputs
+  --chdir /work
+  --setenv HOME /work/.sandbox/home
+  --setenv XDG_CONFIG_HOME /work/.sandbox/config
+  --setenv XDG_CACHE_HOME /work/.sandbox/cache
+  --setenv XDG_DATA_HOME /work/.sandbox/data
+  --setenv XDG_STATE_HOME /work/.sandbox/data
+  --setenv TMPDIR /work/.sandbox/tmp
+  --setenv TMP /work/.sandbox/tmp
+  --setenv TEMP /work/.sandbox/tmp
+  --setenv PATH "$SANDBOX_PATH"
+  --setenv LANG C.UTF-8
+  --setenv LC_ALL C.UTF-8
+  --setenv TERM xterm-256color
+  --setenv PYTHONDONTWRITEBYTECODE 1
+  --setenv PYTHONNOUSERSITE 1
+  --setenv SSL_CERT_FILE /etc/ssl/certs/ca-certificates.crt
+  --setenv NPM_CONFIG_CACHE /work/.sandbox/cache/npm
+  --setenv NPM_CONFIG_USERCONFIG /work/.sandbox/config/npmrc
+  --setenv GIT_CONFIG_NOSYSTEM 1
+  --setenv GIT_CONFIG_GLOBAL /work/.sandbox/config/gitconfig
+  --setenv CCACHE_DIR /work/.sandbox/cache/ccache
+  --setenv SCCACHE_DIR /work/.sandbox/cache/sccache
+  --setenv CCACHE_EXECUTABLE ""
+  --setenv PLAYWRIGHT_BROWSERS_PATH /work/.sandbox/deps/browser
+  --setenv RTL_PROJECT_ROOT /work
+  --setenv RTL_SANDBOX 1
+  --setenv RTL_PROFILE "$PROFILE"
+  --setenv RTL_NETWORK "$NETWORK"
+)
+
+if [[ "$NETWORK" == "offline" ]]; then
+  BWRAP+=(--unshare-net)
+else
+  # Online mode shares the host network, including loopback proxies. Preserve
+  # only proxy settings across --clearenv; keep their values out of source/logs.
+  for proxy_var in http_proxy https_proxy all_proxy no_proxy \
+                   HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY; do
+    if [[ -v "$proxy_var" ]]; then
+      BWRAP+=(--setenv "$proxy_var" "${!proxy_var}")
+    fi
+  done
+fi
+
+# Mount the project. Build/test/run profiles keep source read-only; only the
+# explicit edit profile makes the whole project writable.
+if [[ "$PROFILE" == "edit" ]]; then
+  BWRAP+=(--bind "$PROJECT" /work)
+else
+  BWRAP+=(--ro-bind "$PROJECT" /work)
+fi
+
+# Overlay the only writable project subdirectories. These are created above.
+for d in .sandbox/cache .sandbox/config .sandbox/data \
+         .sandbox/deps .sandbox/evidence build state dist node_modules; do
+  if [[ "$PROFILE" != "edit" ]]; then
+    BWRAP+=(--bind "$PROJECT/$d" "/work/$d")
+  fi
+done
+
+# HOME, TMPDIR and the private run directory are ephemeral tmpfs mounts even
+# when the project itself is writable.
+BWRAP+=(--tmpfs /work/.sandbox/home --tmpfs /work/.sandbox/tmp --tmpfs /work/.sandbox/run)
+
+# Optional read-only input roots are mounted under /inputs. They are never
+# writable, and no host path is exposed to the command line.
+for input in "${INPUT_ROOTS[@]}"; do
+  [[ -d "$input" ]] || die "input root not found: $input"
+  real="$(cd -- "$input" && pwd -P)"
+  name="$(basename -- "$real" | tr -c 'A-Za-z0-9._-' '_')"
+  [[ -n "$name" ]] || name="input"
+  BWRAP+=(--ro-bind "$real" "/inputs/$name")
+done
+
+if (($#)); then
+  exec "${BWRAP[@]}" -- "$@"
+else
+  exec "${BWRAP[@]}" -- /bin/bash -l
+fi

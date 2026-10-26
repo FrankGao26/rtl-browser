@@ -1,0 +1,5 @@
+{"protocolVersion":1,"jobId":"job-fixture","seq":0,"type":"hello","capabilities":["hierarchy","resolved-symbols","types-values","drivers-bit-mapping","loads-direct-dependencies","preprocessor-provenance","definition-links","source-snapshot"],"compilerVersion":"12.0.0+545f88b2e","extractorVersion":"0.9.11"}
+{"protocolVersion":1,"jobId":"job-fixture","seq":1,"type":"stage","stage":"COMPILING","state":"start"}
+{"protocolVersion":1,"jobId":"job-fixture","seq":2,"type":"diagnostic","diagnostic":{"sequence":0,"stage":"COMPILING","severity":"warning","code":"unused-port","message":"port is unused","primaryLocation":{"displayPath":"leaf.sv","line":3,"column":1}}}
+{"protocolVersion":1,"jobId":"job-fixture","seq":3,"type":"stage","stage":"INDEXING","state":"finish","elapsedMs":12}
+{"protocolVersion":1,"jobId":"job-fixture","seq":4,"type":"artifact.ready","manifestPath":"manifest.json","manifestSha256":"1111111111111111111111111111111111111111111111111111111111111111","snapshotId":"snap-1","counts":{"instances":3,"symbols":10,"occurrences":20,"drivers":4,"loads":5,"sources":2},"capabilities":{"hierarchy":{"present":true,"complete":true,"reason":null}}}

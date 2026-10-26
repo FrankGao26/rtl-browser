@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rtl-browser.local/schema/worker-message.schema.json",
+  "title": "WorkerMessage",
+  "oneOf": [
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/stage" },
+    { "$ref": "#/$defs/progress" },
+    { "$ref": "#/$defs/diagnostic" },
+    { "$ref": "#/$defs/artifact" },
+    { "$ref": "#/$defs/failed" },
+    { "$ref": "#/$defs/cancelled" }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["protocolVersion", "jobId", "seq", "type"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "jobId": { "type": "string", "minLength": 1 },
+        "seq": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["displayPath", "line", "column"],
+      "properties": {
+        "displayPath": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "endColumn": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "hello": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "type": "object",
+      "required": ["type", "capabilities", "compilerVersion", "extractorVersion"],
+      "properties": {
+        "type": { "const": "hello" },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "capabilities.schema.json#/$defs/capability" }
+        },
+        "compilerVersion": { "type": "string" },
+        "extractorVersion": { "type": "string" }
+      }
+    },
+    "stage": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "type": "object",
+      "required": ["type", "stage", "state"],
+      "properties": {
+        "type": { "const": "stage" },
+        "stage": {
+          "enum": ["COMPILING", "EXTRACTING", "INDEXING", "VALIDATING"]
+        },
+        "state": { "enum": ["start", "finish", "fail", "cancel"] },
+        "elapsedMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "progress": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "type": "object",
+      "required": ["type", "stage", "counts", "elapsedMs"],
+      "properties": {
+        "type": { "const": "progress" },
+        "stage": { "type": "string" },
+        "counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "elapsedMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "diagnostic": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "type": "object",
+      "required": ["type", "diagnostic"],
+      "properties": {
+        "type": { "const": "diagnostic" },
+        "diagnostic": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sequence", "stage", "severity", "code", "message"],
+          "properties": {
+            "sequence": { "type": "integer", "minimum": 0 },
+            "stage": { "type": "string" },
+            "severity": { "enum": ["error", "warning", "note", "info"] },
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "primaryLocation": { "$ref": "#/$defs/location" },
+            "relatedNotes": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "required": ["severity", "message"],
+                "properties": {
+                  "severity": { "enum": ["error", "warning", "note", "info"] },
+                  "message": { "type": "string" },
+                  "primaryLocation": { "$ref": "#/$defs/location" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "artifact": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "type": "object",
+      "required": ["type", "manifestPath", "manifestSha256", "snapshotId", "counts", "capabilities"],
+      "properties": {
+        "type": { "const": "artifact.ready" },
+        "manifestPath": { "type": "string", "pattern": "^[^/].*\\.json$" },
+        "manifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "snapshotId": { "type": "string", "minLength": 1 },
+        "counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "capabilities.schema.json#/$defs/capabilityStatus"
+          }
+        }
+      }
+    },
+    "failed": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "type": "object",
+      "required": ["type", "error"],
+      "properties": {
+        "type": { "const": "failed" },
+        "error": {
+          "type": "object",
+          "required": ["code", "message", "retryable"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "retryable": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "cancelled": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "const": "cancelled" } }
+    }
+  }
+}

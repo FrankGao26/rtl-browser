@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=lf
+*.rtlbsnap binary
+*.bin binary
+*.png binary
+*.ico binary

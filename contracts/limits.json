@@ -1,0 +1,16 @@
+{
+  "protocolVersion": 1,
+  "maxRequestBytes": 65536,
+  "maxResponseBytes": 1048576,
+  "maxSourceResponseBytes": 8388608,
+  "maxSourceWindowBytes": 262144,
+  "defaultPageSize": 200,
+  "maxPageSize": 1000,
+  "queryQueueDepth": 32,
+  "queryTimeoutMs": 1000,
+  "sourceSearchTimeoutMs": 10000,
+  "maxDiagnostics": 10000,
+  "maxLogBytes": 2097152,
+  "maxWorkerFrameBytes": 1048576,
+  "maxSourceFileBytes": 268435456
+}

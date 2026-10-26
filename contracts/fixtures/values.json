@@ -1,0 +1,9 @@
+{
+  "zero": 0,
+  "emptyString": "",
+  "negative": "-9223372036854775808",
+  "aboveJsSafeInteger": "9007199254740993",
+  "fourState": "4'b10xz",
+  "wide": "128'h0123456789abcdef0123456789abcdef",
+  "nullValue": null
+}
