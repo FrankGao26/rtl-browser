@@ -160,14 +160,14 @@ if (-not (Test-Path $SlangCMake)) {
   Write-Host "configure slang (CC=$CC CXX=$CXX)"
   & cmake -S $slangSrc -B $SlangBuild -G Ninja `
     -DCMAKE_BUILD_TYPE=Release `
-    -DCMAKE_INSTALL_PREFIX=$SlangPrefix `
+    "-DCMAKE_INSTALL_PREFIX=$SlangPrefix" `
     -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
     -DSLANG_INCLUDE_TESTS=OFF -DSLANG_INCLUDE_TOOLS=OFF `
     -DSLANG_INCLUDE_DOCS=OFF -DSLANG_INCLUDE_PYLIB=OFF `
     -DSLANG_INCLUDE_INSTALL=ON `
     -DSLANG_USE_MIMALLOC=OFF -DSLANG_USE_SYSTEM_FMT=OFF `
     -DSLANG_USE_SYSTEM_BOOST=OFF -DBUILD_SHARED_LIBS=OFF `
-    -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX
+    "-DCMAKE_C_COMPILER=$CC" "-DCMAKE_CXX_COMPILER=$CXX"
   if ($LASTEXITCODE -ne 0) { throw "slang configure failed with exit code $LASTEXITCODE" }
   Write-Host "build slang -j$jobs"
   & cmake --build $SlangBuild --target install --parallel $jobs

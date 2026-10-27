@@ -49,6 +49,9 @@ if (-not (Test-Path (Join-Path $SlangDir "slangConfig.cmake"))) {
 }
 
 Enter-RtlMsvcEnv
+# Enter-VsDevShell can restore PATH from its original developer-shell state.
+# Keep the selected Node/npm available to nested npm lifecycle commands.
+$env:PATH = "$NodeBin;$env:PATH"
 $CC = if ($env:RTL_CC) { $env:RTL_CC } else { "cl" }
 $CXX = if ($env:RTL_CXX) { $env:RTL_CXX } else { "cl" }
 if (-not (Get-Command $CC -ErrorAction SilentlyContinue) -or
@@ -60,10 +63,10 @@ Write-Host "== configure native worker (CC=$CC CXX=$CXX) =="
 & cmake -S (Join-Path $Root "native\index-worker") -B $BuildDir -G Ninja `
   -DCMAKE_BUILD_TYPE=Release `
   -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
-  -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX `
-  -DRTL_DEPS_DIR=$Deps `
-  -DRTL_SLANG_COMMIT=$V.slangCommit `
-  -Dslang_DIR=$SlangDir
+  "-DCMAKE_C_COMPILER=$CC" "-DCMAKE_CXX_COMPILER=$CXX" `
+  "-DRTL_DEPS_DIR=$Deps" `
+  "-DRTL_SLANG_COMMIT=$($V.slangCommit)" `
+  "-Dslang_DIR=$SlangDir"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
 
 Write-Host "== build native worker =="

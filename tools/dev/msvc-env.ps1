@@ -20,7 +20,7 @@ function Enter-RtlMsvcEnv {
   if (-not (Test-Path $vswhere)) {
     throw "vswhere.exe not found. Install Visual Studio 2022/2026 Build Tools with the C++ x64 workload."
   }
-  $install = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1)
+  $install = (& $vswhere -latest -products '*' -property installationPath | Select-Object -First 1)
   if (-not $install) {
     throw "No Visual Studio installation with the C++ x64 workload was found."
   }
@@ -33,7 +33,8 @@ function Enter-RtlMsvcEnv {
   if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
     throw "cl.exe is still unavailable after entering the Visual Studio developer shell."
   }
-  $version = (& cl.exe 2>&1 | Select-Object -First 1)
+  $clPath = (Get-Command cl.exe -ErrorAction Stop).Source
+  $version = (Get-Item -LiteralPath $clPath).VersionInfo.FileVersion
   Write-Host "MSVC: $version"
 }
 

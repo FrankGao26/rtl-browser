@@ -163,7 +163,12 @@ async function build(projectId, key, revision = 1) {
   let last = null;
   for (let i = 0; i < 300; i++) {
     last = await ok("GET", `/api/projects/${projectId}/jobs/${job.jobId}`);
-    if (["COMPLETE", "FAILED", "CANCELLED"].includes(last.state)) return { ...last, purged: job.purged };
+    if (["COMPLETE", "FAILED", "CANCELLED"].includes(last.state)) {
+      if (last.state === "FAILED" && process.env.RTL_TEST_VERBOSE_FAILURES === "1") {
+        console.error("build failed:", JSON.stringify(last), "\nserver stderr:\n" + stderr);
+      }
+      return { ...last, purged: job.purged };
+    }
     await sleep(100);
   }
   throw new Error(`build did not finish: ${JSON.stringify(last)}\n${stderr}`);
@@ -173,7 +178,11 @@ try {
   // 1. simple project: hierarchy, params, port actuals, loads
   const simple = await createProject("simple-it", "simple");
   const simpleJob = await build(simple.project.projectId, "it-simple-1");
-  assert.equal(simpleJob.state, "COMPLETE");
+  assert.equal(
+    simpleJob.state,
+    "COMPLETE",
+    JSON.stringify(simpleJob, null, 2) + "\nserver stderr:\n" + stderr,
+  );
   assert.equal(simpleJob.diagnostics.error, 0);
   const snaps = await ok("GET", `/api/projects/${simple.project.projectId}/snapshots`);
   assert.equal(snaps.length, 1);
@@ -205,6 +214,8 @@ try {
   const manifestPath = path.join(snapshotsDir, sid, "manifest.json");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   assert.match(manifest.compilerCommit, /^[0-9a-f]{40}$/);
+  assert.equal(manifest.compilerCommit,
+    JSON.parse(fs.readFileSync(path.join(ROOT, "tools", "deps", "versions.json"), "utf8")).slangCommit);
   assert.equal(manifest.extractorVersion, "0.9.11");
   const children = await ok("GET", `/api/projects/${simple.project.projectId}/snapshots/${sid}/hierarchy/children`);
   const root = children.records[0];
@@ -273,10 +284,12 @@ try {
   assert.ok(u8drivers.records.length >= 1);
 
   // 1b. idempotent repeat build
-  const repeat = await build(simple.project.projectId, "it-simple-2");
-  assert.equal(repeat.state, "COMPLETE");
-  assert.equal(repeat.snapshotId, sid);
-  assert.ok(!repeat.purged);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const repeat = await build(simple.project.projectId, `it-simple-repeat-${attempt}`);
+    assert.equal(repeat.state, "COMPLETE", JSON.stringify(repeat, null, 2) + "\n" + stderr);
+    assert.equal(repeat.snapshotId, sid, "identical inputs must publish identical index content");
+    assert.ok(!repeat.purged);
+  }
 
   // 1c. project paths containing spaces and non-ASCII characters
   const unicodeDir = path.join(STATE, "projects", "unicode 路径 with space");
@@ -749,6 +762,7 @@ try {
   assert.equal(same.snapshotDiscarded, false, "saving identical config keeps the snapshot");
   assert.equal((await ok("GET", `/api/projects/${purge.project.projectId}/snapshots`)).length, 1);
   const p3 = await build(purge.project.projectId, "it-purge-3", 3);
+  assert.equal(p3.state, "COMPLETE", JSON.stringify(p3, null, 2) + "\n" + stderr);
   assert.equal(p3.purged, false);
   assert.equal(p3.snapshotId, p2.snapshotId);
   const discard = await ok("POST", `/api/projects/${purge.project.projectId}/snapshot/discard`);
@@ -936,6 +950,13 @@ try {
   for (const [dir, hash] of hashes) assert.equal(hashTree(dir), hash, `${dir} source changed`);
 
   console.log("integration: PASS");
+} catch (error) {
+  if (process.env.RTL_TEST_PRESERVE_FAILURES === "1") {
+    const evidence = path.join(ROOT, ".sandbox", "evidence", path.basename(STATE));
+    fs.cpSync(STATE, evidence, { recursive: true });
+    console.error(`integration failure evidence: ${evidence}`);
+  }
+  throw error;
 } finally {
   await stopServer(server, async () => { await api("POST", "/api/app/exit"); });
   for (const name of fs.readdirSync(path.join(STATE, "projects"))) {

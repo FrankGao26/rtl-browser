@@ -1581,7 +1581,13 @@ void Indexer::addDrivers(BodyInfo& body) {
       canonicalBody && canonicalBody != body.body ? &bodySymbolMap(*canonicalBody) : nullptr;
   const auto* ownMap = canonicalMap ? &bodySymbolMap(*body.body) : nullptr;
 
-  for (const auto& [symPtr, id] : body.symbols) {
+  // Pointer-hashed iteration changes with allocation / ASLR. Database row IDs
+  // must instead follow the stable IDs assigned during declaration traversal.
+  std::vector<std::pair<const slang::ast::Symbol*, int64_t>> orderedSymbols(
+      body.symbols.begin(), body.symbols.end());
+  std::sort(orderedSymbols.begin(), orderedSymbols.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+  for (const auto& [symPtr, id] : orderedSymbols) {
     if (!symPtr || !slang::ast::ValueSymbol::isKind(symPtr->kind)) continue;
     const auto& value = symPtr->as<slang::ast::ValueSymbol>();
     auto drivers = analysis_.getDrivers(value);
@@ -2339,18 +2345,25 @@ void Indexer::run() {
   addPreprocessorLinks();
   addPreprocessorRegions();
   addGlobalPackageImports();
+  std::vector<BodyInfo*> orderedBodies;
+  orderedBodies.reserve(bodies_.size());
   for (auto& [ptr, body] : bodies_) {
     (void)ptr;
-    addBodyReferences(body);
-    addDrivers(body);
-    addLoads(body);
+    orderedBodies.push_back(&body);
   }
-  for (const auto* inst : [&]() {
-         std::vector<const slang::ast::InstanceSymbol*> v;
-         v.reserve(instanceIds_.size());
-         for (const auto& [p, id] : instanceIds_) { (void)id; v.push_back(p); }
-         return v;
-       }()) {
+  std::sort(orderedBodies.begin(), orderedBodies.end(),
+            [](const auto* a, const auto* b) { return a->id < b->id; });
+  for (auto* body : orderedBodies) {
+    addBodyReferences(*body);
+    addDrivers(*body);
+    addLoads(*body);
+  }
+  std::vector<std::pair<const slang::ast::InstanceSymbol*, int64_t>> orderedInstances(
+      instanceIds_.begin(), instanceIds_.end());
+  std::sort(orderedInstances.begin(), orderedInstances.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+  for (const auto& [inst, id] : orderedInstances) {
+    (void)id;
     auto bit = bodies_.find(&inst->body);
     if (bit != bodies_.end()) addPortEdges(*inst, bit->second);
   }

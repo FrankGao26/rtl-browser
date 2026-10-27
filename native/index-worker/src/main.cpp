@@ -335,7 +335,18 @@ int runMain(const std::vector<std::string>& argv) {
 
     std::string indexSha = sha256Hex(readText(platform::fromUtf8(args.output) / "index.sqlite"));
     std::string compilerCommit = std::string(slang::VersionInfo::getHash());
-    if (compilerCommit.empty() || compilerCommit == "0") compilerCommit = RTL_SLANG_COMMIT;
+    const std::string pinnedCompilerCommit = RTL_SLANG_COMMIT;
+    const bool fullPin = pinnedCompilerCommit.size() == 40 &&
+        std::all_of(pinnedCompilerCommit.begin(), pinnedCompilerCommit.end(), [](char c) {
+          return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+        });
+    // slang can report an abbreviated Git hash. Expand it only when it agrees
+    // with our verified build pin; never replace a different compiler revision.
+    if (compilerCommit.empty() || compilerCommit == "0" ||
+        (fullPin && compilerCommit.size() >= 7 && compilerCommit.size() < 40 &&
+         pinnedCompilerCommit.starts_with(compilerCommit))) {
+      compilerCommit = pinnedCompilerCommit;
+    }
     std::string snapshotMaterial = configDigest + "\n" + std::string(slang::VersionInfo::getVersionString()) +
                                    "\n" + compilerCommit + "\n0.9.11\n" + sourceManifestHash(sources);
     std::string snapshotId = "s_" + sha256Hex(snapshotMaterial).substr(0, 16);

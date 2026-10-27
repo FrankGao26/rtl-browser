@@ -258,4 +258,24 @@ std::string replacePathInsensitive(std::string text, std::string_view needle,
 
 #endif
 
+std::filesystem::path fileIoPath(const std::filesystem::path& path) {
+#ifdef _WIN32
+  if (path.empty()) return path;
+  auto preferred = path;
+  preferred.make_preferred();
+  const auto& native = preferred.native();
+  if (native.starts_with(L"\\\\?\\") || native.starts_with(L"\\\\.\\")) return preferred;
+
+  // Extended-length paths must be absolute and use backslashes, without ./..
+  // components. UNC paths use a different prefix from drive-letter paths.
+  auto absolute = std::filesystem::absolute(preferred).lexically_normal();
+  absolute.make_preferred();
+  const auto& full = absolute.native();
+  if (full.starts_with(L"\\\\")) return std::filesystem::path(L"\\\\?\\UNC\\" + full.substr(2));
+  return std::filesystem::path(L"\\\\?\\" + full);
+#else
+  return path;
+#endif
+}
+
 } // namespace rtl::platform

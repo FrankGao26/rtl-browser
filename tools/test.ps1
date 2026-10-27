@@ -49,6 +49,14 @@ Write-Host "== contracts =="
 & $NodeExe "tests\contracts.mjs"
 if ($LASTEXITCODE -ne 0) { throw "contracts failed" }
 
+Write-Host "== worker lifecycle =="
+& $NodeExe "tests\worker-lifecycle.mjs"
+if ($LASTEXITCODE -ne 0) { throw "worker lifecycle failed" }
+
+Write-Host "== Windows long-path snapshot =="
+& $NodeExe "tests\windows-long-path.mjs"
+if ($LASTEXITCODE -ne 0) { throw "Windows long-path snapshot failed" }
+
 Write-Host "== integration =="
 & $NodeExe "tests\integration.mjs"
 if ($LASTEXITCODE -ne 0) { throw "integration failed" }
