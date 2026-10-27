@@ -20,6 +20,7 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Deps = Join-Path $Root ".sandbox\deps"
 $V = Get-Content -Raw (Join-Path $Root "tools\deps\versions.json") | ConvertFrom-Json
 . (Join-Path $Root "tools\dev\msvc-env.ps1")
+Initialize-RtlWindowsPaths $Root
 
 $NodeExe = Join-Path (Join-Path $Deps "node-v$($V.nodeVersion)-win-x64") "node.exe"
 if (-not (Test-Path $NodeExe)) {

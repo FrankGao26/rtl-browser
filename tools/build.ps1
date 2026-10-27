@@ -19,6 +19,7 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Deps = Join-Path $Root ".sandbox\deps"
 $V = Get-Content -Raw (Join-Path $Root "tools\deps\versions.json") | ConvertFrom-Json
 . (Join-Path $Root "tools\dev\msvc-env.ps1")
+Initialize-RtlWindowsPaths $Root
 
 if (-not (Test-Path (Join-Path $Root "node_modules"))) {
   throw "node_modules is missing; run .\tools\deps\bootstrap.ps1 first."
@@ -60,19 +61,19 @@ if (-not (Get-Command $CC -ErrorAction SilentlyContinue) -or
 }
 $BuildDir = Join-Path $Root "build\index-worker"
 Write-Host "== configure native worker (CC=$CC CXX=$CXX) =="
-& cmake -S (Join-Path $Root "native\index-worker") -B $BuildDir -G Ninja `
-  -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
-  "-DCMAKE_C_COMPILER=$CC" "-DCMAKE_CXX_COMPILER=$CXX" `
-  "-DRTL_DEPS_DIR=$Deps" `
-  "-DRTL_SLANG_COMMIT=$($V.slangCommit)" `
+Invoke-RtlCmake -ProjectRoot $Root -Arguments @(
+  '--fresh', '-S', (Join-Path $Root 'native\index-worker'), '-B', $BuildDir, '-G', 'Ninja',
+  '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_TRY_COMPILE_CONFIGURATION=Release',
+  '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
+  "-DCMAKE_C_COMPILER=$CC", "-DCMAKE_CXX_COMPILER=$CXX",
+  "-DRTL_DEPS_DIR=$Deps",
+  "-DRTL_SLANG_COMMIT=$($V.slangCommit)",
   "-Dslang_DIR=$SlangDir"
-if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
+)
 
 Write-Host "== build native worker =="
 $jobs = if ($env:RTL_BUILD_JOBS) { [int]$env:RTL_BUILD_JOBS } else { 4 }
-& cmake --build $BuildDir --parallel $jobs
-if ($LASTEXITCODE -ne 0) { throw "native worker build failed." }
+Invoke-RtlCmake -ProjectRoot $Root -Arguments @('--build', $BuildDir, '--parallel', "$jobs")
 
 Write-Host "== typecheck =="
 & $Npm run typecheck

@@ -20,15 +20,19 @@ RTL Browser 是一个本地运行的 WebUI RTL 浏览器。选择一个工程目
 
 ## 平台支持
 
-| 平台           | 状态                                                        |
-| -------------- | ----------------------------------------------------------- |
-| Linux x86_64   | 支持，已在 Ubuntu 24.04 WSL2 验证                           |
-| Windows x86_64 | 构建脚本与原生 worker 已适配，需在 Windows 主机执行构建验收 |
-| macOS ARM64    | 后续阶段                                                    |
+| 平台           | 状态                                         |
+| -------------- | -------------------------------------------- |
+| Linux x86_64   | 支持，已在 Ubuntu 24.04 WSL2 验证            |
+| Windows x86_64 | MSVC 路线的原生构建和 Windows 测试脚本已验证 |
+| macOS ARM64    | 后续阶段                                     |
 
 当前只支持 64 位平台。Windows 构建需要较新的 MSVC/Clang：slang 12 要求 MSVC 14.50+/VS 2026 或 Clang 17+，不支持 MinGW。
 
 ## 环境要求
+
+第三方库版本和 SHA-256 统一记录在 `tools/deps/versions.json`。首次 bootstrap 需要网络访问 Node.js、SQLite、GitHub 和 npm registry，包括 slang 配置阶段下载的 fmt、Boost 和 tomlplusplus；依赖准备完成后，build 和 serve 可复用本地产物。
+
+依赖和构建产物不提交到仓库：第三方源码、固定 Node 及 slang 安装目录位于 `.sandbox/deps`，npm 包位于仓库根目录的 `node_modules`，产物位于 `build`、`dist`。Windows 脚本将 npm/Node 缓存、npm 用户配置和常规临时目录指向 `.sandbox`，只修改当前进程及其子进程的环境变量。
 
 ### Linux
 
@@ -42,32 +46,35 @@ RTL Browser 是一个本地运行的 WebUI RTL 浏览器。选择一个工程目
 
 ### Windows
 
-- Node.js 24
-- CMake >= 3.28
-- Ninja
-- Python 3
-- Git
-- Visual Studio 2026 Build Tools（x64 C++ 工作负载）或 LLVM clang-cl 17+ + Visual Studio Windows SDK/STL
+- Windows PowerShell 5.1 或 PowerShell 7，64 位 Windows
+- Python 3、Git
+- Visual Studio 2026 Build Tools，至少安装以下组件：
+
+  - 适用于 x64/x86 的 MSVC 构建工具，工具集 >= 14.50（`cl` >= 19.50）。固定版本 14.51 也可使用
+  - 一个 Windows SDK（推荐 Windows 11 SDK）
+  - 用于 Windows 的 C++ CMake 工具，提供 CMake 和 Ninja；CMake 需 >= 3.28
+- Windows bootstrap 会下载仓库锁定的完整 Node.js 24 ZIP，并在项目内解压
 - 浏览器：Edge / Chrome / Firefox
 
-第三方库版本和 SHA-256 统一记录在 `tools/deps/versions.json`，首次 bootstrap 需要网络；完成后可离线构建。第三方源码、Node 运行时和 `node_modules` 不提交到仓库，bootstrap 会下载到被忽略的 `.sandbox/deps`。
+## 编译构建
 
-## 快速开始
+首次使用时先准备依赖并构建程序；构建成功后，按下文“启动服务”单独运行。已有构建产物时，日常启动无需重复 bootstrap、build 或 test；更新源码后需重新构建，依赖变化时再运行 bootstrap。
 
 ### Linux
 
 ```bash
 git clone <repository-url> rtl-browser
 cd rtl-browser
-
-./tools/deps/bootstrap.sh   # 下载并校验固定版本的 Node、slang、SQLite、nlohmann/json
-./tools/build.sh            # 构建 C++ worker、TypeScript server 和 WebUI
-./tools/launchers/rtl-browser serve     # 启动服务并打印 URL
 ```
 
-打开终端输出的 `open:` URL。`tools/build.sh` 会优先使用 `.sandbox/deps` 中的固定 Node；不要求宿主 Node 与项目锁定版本完全一致，但必须是 Node 24。
+下载依赖并启动编译：
 
-开发时也可以使用项目 bwrap 沙箱（Linux 可选）：
+```bash
+./tools/deps/bootstrap.sh   # 下载并校验固定版本的 Node、slang、SQLite、nlohmann/json
+./tools/build.sh            # 构建 C++ worker、TypeScript server 和 WebUI
+```
+
+也可以使用项目 bwrap 沙箱替代（可选）：
 
 ```bash
 ./tools/sandbox/verify-isolation.sh --network online
@@ -78,47 +85,49 @@ cd rtl-browser
 
 ### Windows x64
 
-在 PowerShell 中：
+安装上述组件后，打开普通权限的 PowerShell，在仓库根目录依次执行。上一条命令成功后再继续：
 
 ```powershell
 git clone <repository-url> rtl-browser
 cd rtl-browser
 
+$ErrorActionPreference = 'Stop'
+$env:RTL_BUILD_JOBS = '4'   # 可按内存情况降低并行度
 .\tools\deps\bootstrap.ps1
 .\tools\build.ps1
+```
+
+## 启动服务
+
+在已完成构建的仓库根目录执行。可以使用新终端，无需先加载 VS 编译环境；启动器会优先使用项目内的 Node。以下命令直接运行已有产物，不执行依赖安装或编译。
+
+### Linux
+
+```bash
+./tools/launchers/rtl-browser serve
+```
+
+### Windows x64
+
+```powershell
 .\tools\launchers\rtl-browser.cmd serve
 ```
 
-`bootstrap.ps1` 会检查 CMake、Ninja、Python、Git 和 Visual Studio，并通过 `vswhere`/`VsDevShell` 初始化 `cl.exe`、Windows SDK 和 Ninja 环境。如果使用 LLVM clang-cl：
+手动打开终端打印的完整 `open:` URL。服务只监听 `127.0.0.1`，端口默认自动分配；启动器不会自动打开浏览器。使用完成后在终端按 `Ctrl+C` 退出。若提示缺少构建产物，先完成上文“编译构建”。
 
-```powershell
-$env:RTL_CC = "clang-cl"
-$env:RTL_CXX = "clang-cl"
-.\tools\deps\bootstrap.ps1
-.\tools\build.ps1
-```
+默认启动命令允许访问当前目录下的工程。试用时选择 `examples/axi-crossbar`，填写 Filelist `design.f`、Top `axi_crossbar`；浏览仓库外的工程时，启动时添加 `--workspace <工程目录>`，需要多个允许目录时重复该参数。
 
-clang-cl 必须使用 Visual Studio 的 Windows SDK 和 STL；slang 不支持 MinGW。Windows 上 64 位构建产物为：
+## 使用说明
 
-```text
-build\index-worker\index-worker.exe
-dist\server\apps\server\src\main.js
-dist\web\index.html
-```
+启动服务并打开终端打印的 URL 后：
 
-Windows 构建需要较新的 Visual Studio；若本机 MSVC 版本过旧，bootstrap 会直接报错并提示安装新版 Build Tools 或改用 clang-cl。工程路径建议使用本地 NTFS 磁盘，并在包含空格、中文或较长路径的目录上单独验收。
-
-## 第一次使用
-
-1. 启动服务后打开终端打印的 URL。
-2. 点击“打开工程目录”，选择包含 RTL 的目录。可以先用 `examples/axi-crossbar` 试用。
-3. 填写 Filelist 和 Top 模块，点击“编译并建立索引”。
-4. 编译完成后进入 Hierarchy、Source、Inspector 和 Compile 视图。
-5. 顶栏可以导出/导入 `.rtlbsnap` 快照；快照导入不要求原 RTL 目录存在。
-
-工程目录就是工程根，不需要额外填写工程名称、源根或工作目录。每个服务进程管理一个工程；需要并行处理不同设计时启动多个服务进程。
-
-工程目录和项目配置的具体填写步骤见 [使用说明](docs/usage.md)。
+1. 点击“打开工程目录”，选择 RTL 工程根目录。
+2. 在构建表单中选择输入方式：
+   - **Filelist**：填写相对工程根目录的 filelist 路径，例如 `design.f`。
+   - **源文件列表**：按顺序填写源文件路径。
+3. 填写 **Top 模块**。
+4. 按需填写宏定义、include 目录、library、参数覆盖和语言模式；没有特殊需求可以留空。
+5. 点击“编译并建立索引”。编译和索引成功后即可浏览层次、源码和编译报告；失败时在 Compile 窗口查看诊断。
 
 ## 项目配置
 
@@ -143,8 +152,6 @@ Windows：
 .\tools\test.ps1
 ```
 
-测试会创建临时工程和 `.rtlb` 会话目录。Linux 的 `tools/test.sh` 包含类型检查、契约、集成、安全、UI E2E 和公开 RTL smoke；设置 `RTL_TEST_SKIP_UI=1` 可跳过需要 Chromium 的 UI 阶段。Windows 的 `tools/test.ps1` 当前覆盖类型检查、契约和跨平台集成测试；POSIX 权限/symlink 安全用例只在 Linux 执行。
-
 ## 项目结构
 
 ```text
@@ -158,10 +165,6 @@ tools/                  依赖、构建、测试、Linux 沙箱和启动器
 examples/               公开示例工程
 docs/                   项目配置使用说明
 ```
-
-## 使用说明
-
-工程目录选择和项目配置填写见 [docs/usage.md](docs/usage.md)。
 
 ## 许可证
 

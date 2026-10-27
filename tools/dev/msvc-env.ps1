@@ -36,6 +36,73 @@ function Enter-RtlMsvcEnv {
   $clPath = (Get-Command cl.exe -ErrorAction Stop).Source
   $version = (Get-Item -LiteralPath $clPath).VersionInfo.FileVersion
   Write-Host "MSVC: $version"
+
+  $compiler = if ($env:RTL_CXX) { $env:RTL_CXX } else { "cl" }
+  if ($compiler -match '(?i)(^|[\\/])cl(?:\.exe)?$') {
+    if ($version -notmatch '^\d+\.\d+' -or [version]$Matches[0] -lt [version]'19.50') {
+      throw "slang 12 requires MSVC toolset >= 14.50 (cl >= 19.50). Install VS 2026 C++ Build Tools or select clang-cl >= 17."
+    }
+  } elseif ($compiler -match '(?i)(^|[\\/])clang-cl(?:\.exe)?$') {
+    $clangVersion = & $compiler --version
+    if ($LASTEXITCODE -ne 0 -or ($clangVersion -join ' ') -notmatch 'clang version (\d+)' -or [int]$Matches[1] -lt 17) {
+      throw "slang 12 requires clang-cl >= 17, with the Visual Studio SDK and STL."
+    }
+  }
+
+  # VS can ship CMake / Ninja without installing either into the system PATH.
+  foreach ($relative in @(
+    'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+    'Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja'
+  )) {
+    $toolDir = Join-Path $install $relative
+    if (Test-Path -LiteralPath $toolDir) { $env:PATH = "$toolDir;$env:PATH" }
+  }
+}
+
+# Changes apply only to this PowerShell process and its children.
+function Initialize-RtlWindowsPaths {
+  param([string]$ProjectRoot)
+  $private = Join-Path $ProjectRoot '.sandbox'
+  foreach ($relative in @('tmp', 'cache\npm', 'cache\node', 'config')) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $private $relative) | Out-Null
+  }
+  $env:TEMP = Join-Path $private 'tmp'
+  $env:TMP = $env:TEMP
+  $env:TMPDIR = $env:TEMP
+  $env:NPM_CONFIG_CACHE = Join-Path $private 'cache\npm'
+  $env:NPM_CONFIG_USERCONFIG = Join-Path $private 'config\npmrc'
+  $env:NPM_CONFIG_UPDATE_NOTIFIER = 'false'
+  $env:NODE_COMPILE_CACHE = Join-Path $private 'cache\node'
+  if (-not (Test-Path -LiteralPath $env:NPM_CONFIG_USERCONFIG)) {
+    [System.IO.File]::WriteAllText($env:NPM_CONFIG_USERCONFIG, '')
+  }
+}
+
+function Invoke-RtlCmake {
+  param([string]$ProjectRoot, [string[]]$Arguments)
+  $cmakeExe = (Get-Command cmake -CommandType Application -ErrorAction Stop).Source
+  $savedTemp = $env:TEMP
+  $savedTmp = $env:TMP
+  $savedTmpdir = $env:TMPDIR
+  $savedPreference = $ErrorActionPreference
+  Push-Location -LiteralPath $ProjectRoot
+  try {
+    # MSVC's linker can misdecode a non-ASCII absolute TEMP. Its current
+    # working directory (including nested CMake build dirs) is project-private.
+    $env:TEMP = '.'
+    $env:TMP = '.'
+    $env:TMPDIR = '.'
+    $ErrorActionPreference = 'Continue'
+    & $cmakeExe @Arguments
+    $cmakeExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $savedPreference
+    $env:TEMP = $savedTemp
+    $env:TMP = $savedTmp
+    $env:TMPDIR = $savedTmpdir
+    Pop-Location
+  }
+  if ($cmakeExit -ne 0) { throw "CMake failed with exit code $cmakeExit" }
 }
 
 function Get-RtlNodeVersion {
