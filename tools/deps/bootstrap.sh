@@ -116,8 +116,7 @@ for d in "$DEPS/slang/lib64/cmake/slang" "$DEPS/slang/lib/cmake/slang"; do
 done
 if [[ -z "$SLANG_CMAKE_DIR" ]]; then
   echo "configure slang"
-  rm -rf "$ROOT/build/slang"
-  cmake -S "$DEPS/slang-src" -B "$ROOT/build/slang" -G Ninja \
+  cmake --fresh -S "$DEPS/slang-src" -B "$ROOT/build/slang" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$DEPS/slang" \
     -DSLANG_INCLUDE_TESTS=OFF -DSLANG_INCLUDE_TOOLS=OFF \

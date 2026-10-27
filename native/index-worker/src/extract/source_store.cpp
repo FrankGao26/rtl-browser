@@ -15,6 +15,7 @@
 #include "source_store.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -27,7 +28,8 @@ namespace fs = std::filesystem;
 
 void SourceStore::capture(IndexWriter& writer, const slang::SourceManager& sm, const PathPolicy& paths,
                           const std::string& outputDir, const std::vector<std::string>& excludeFiles) {
-  fs::create_directories(platform::fromUtf8(outputDir) / "sources");
+  const fs::path sourcesDir = platform::fileIoPath(platform::fromUtf8(outputDir) / "sources");
+  fs::create_directories(sourcesDir);
   for (slang::BufferID buffer : sm.getAllBuffers()) {
     auto kind = sm.getBufferKind(buffer);
     if (kind != slang::SourceManager::BufferKind::DesignFile &&
@@ -39,7 +41,7 @@ void SourceStore::capture(IndexWriter& writer, const slang::SourceManager& sm, c
     while (!data.empty() && data.back() == '\0') data.remove_suffix(1);
     std::string display;
     const auto& full = sm.getFullPath(buffer);
-    const fs::path fullPath = full.empty() ? fs::path() : platform::fromUtf8(std::string(full));
+    const fs::path fullPath = full;
     if (!full.empty()) {
       bool excluded = false;
       for (const auto& excludeFile : excludeFiles) {
@@ -75,12 +77,17 @@ void SourceStore::capture(IndexWriter& writer, const slang::SourceManager& sm, c
       }
     }
 
-    const fs::path blob = platform::fromUtf8(outputDir) / "sources" / (sha + ".bin");
+    const fs::path blob = sourcesDir / (sha + ".bin");
     if (!fs::exists(blob)) {
       std::ofstream out(blob, std::ios::binary);
-      if (!out) throw std::runtime_error("cannot write source blob");
+      if (!out) {
+        const int error = errno;
+        throw std::runtime_error("cannot write source blob " + platform::toUtf8(blob) +
+                                 ": " + std::error_code(error, std::generic_category()).message());
+      }
       out.write(info->data.data(), std::streamsize(info->data.size()));
       out.close();
+      if (!out) throw std::runtime_error("cannot finish source blob " + platform::toUtf8(blob));
 #ifndef _WIN32
       std::error_code ec;
       fs::permissions(blob, fs::perms::owner_read | fs::perms::group_read | fs::perms::others_read,

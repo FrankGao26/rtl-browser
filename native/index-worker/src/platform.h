@@ -28,6 +28,9 @@ std::filesystem::path fromUtf8(std::string_view text);
 std::string toUtf8(const std::filesystem::path& path);
 std::string genericUtf8(const std::filesystem::path& path);
 
+// For internal file I/O only; do not persist or display the Windows prefix.
+std::filesystem::path fileIoPath(const std::filesystem::path& path);
+
 bool setCurrentDirectory(const std::filesystem::path& path);
 bool isReadable(const std::filesystem::path& path);
 std::optional<std::string> getEnv(std::string_view name);

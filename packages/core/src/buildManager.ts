@@ -230,8 +230,10 @@ export class BuildManager extends EventEmitter {
         });
       });
     }
-    child.on("exit", (code, signal) => {
-      console.error(`[build ${jobId}] worker exit code=${String(code)} signal=${String(signal)} error=${ab.workerError?.code ?? "none"} artifact=${!!ab.artifact}`);
+    // exit can precede the final stdout frame, especially on Windows. Wait for
+    // close so the protocol and stderr pipes have drained before finalizing.
+    child.on("close", (code, signal) => {
+      console.error(`[build ${jobId}] worker close code=${String(code)} signal=${String(signal)} error=${ab.workerError?.code ?? "none"} artifact=${!!ab.artifact}`);
       void this.onExit(ab, code, signal).catch(async (err) => {
         console.error(`[build ${jobId}] onExit failed:`, err);
         try {

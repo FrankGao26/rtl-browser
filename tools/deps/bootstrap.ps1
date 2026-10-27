@@ -26,6 +26,9 @@ $V = Get-Content -Raw $VersionsFile | ConvertFrom-Json
 New-Item -ItemType Directory -Force -Path $Deps, $Evidence, (Join-Path $Root "build") | Out-Null
 
 . (Join-Path $Root "tools\dev\msvc-env.ps1")
+Initialize-RtlWindowsPaths $Root
+# Initialize before probing tools that may only exist in the VS installation.
+Enter-RtlMsvcEnv
 
 function Get-VersionString {
   param([string]$Command)
@@ -44,12 +47,38 @@ function Download-Verified {
   if (-not (Test-Path $Destination)) {
     Write-Host "download $(Split-Path -Leaf $Destination)"
     $part = "$Destination.part"
-    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $part
+    Invoke-RtlDownload $Url $part
     Move-Item -Force $part $Destination
   }
   $actual = (Get-FileHash -Algorithm SHA256 $Destination).Hash.ToLowerInvariant()
   if ($actual -ne $Sha256.ToLowerInvariant()) {
     throw "SHA-256 mismatch for $Destination`nexpected $Sha256`nactual   $actual"
+  }
+}
+
+function Invoke-RtlDownload {
+  param([string]$Url, [string]$Destination)
+  $proxyArgs = @{}
+  $proxy = if ($Url.StartsWith('https:') -and $env:HTTPS_PROXY) {
+    $env:HTTPS_PROXY
+  } else { $env:HTTP_PROXY }
+  if ($proxy) { $proxyArgs.Proxy = $proxy }
+  Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination -TimeoutSec 120 @proxyArgs
+}
+
+function Remove-RtlDependencyTree {
+  param([string]$Path)
+  $target = [System.IO.Path]::GetFullPath($Path)
+  $prefix = [System.IO.Path]::GetFullPath($Deps).TrimEnd('\') + '\'
+  if (-not $target.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to remove a path outside the private dependency directory."
+  }
+  if (Test-Path -LiteralPath $target) {
+    $item = Get-Item -LiteralPath $target -Force
+    if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+      throw "Refusing to recursively remove a dependency junction or symlink."
+    }
+    Remove-Item -LiteralPath $target -Recurse -Force
   }
 }
 
@@ -74,28 +103,18 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
   throw "Git is required."
 }
 
-# Use the host Node when it already has the required major version;
-# otherwise fetch the pinned Windows archive for reproducible builds.
-$NodeExe = $null
+# Use a complete, pinned project-private Node/npm installation, even when a
+# host (or agent runtime) exposes node.exe without npm.cmd.
 $NodeDir = Join-Path $Deps "node-v$($V.nodeVersion)-win-x64"
-if (Get-Command node -ErrorAction SilentlyContinue) {
-  $hostNode = (Get-Command node).Source
-  $hostVersion = (& $hostNode --version) -replace '^v', ''
-  if ([int]($hostVersion.Split('.')[0]) -ge 24) {
-    $NodeExe = $hostNode
-    Write-Host "node: $hostVersion (host)"
-  }
+$nodeZip = Join-Path $Deps (Split-Path -Leaf $V.nodeWindowsX64Url)
+Download-Verified $V.nodeWindowsX64Url $nodeZip $V.nodeWindowsX64Sha256
+if (-not (Test-Path (Join-Path $NodeDir 'node.exe')) -or
+    -not (Test-Path (Join-Path $NodeDir 'npm.cmd'))) {
+  Expand-Archive -Force -Path $nodeZip -DestinationPath $Deps
 }
-if (-not $NodeExe) {
-  $nodeZip = Join-Path $Deps (Split-Path -Leaf $V.nodeWindowsX64Url)
-  Download-Verified $V.nodeWindowsX64Url $nodeZip $V.nodeWindowsX64Sha256
-  if (-not (Test-Path (Join-Path $NodeDir "node.exe"))) {
-    Expand-Archive -Force -Path $nodeZip -DestinationPath $Deps
-  }
-  $NodeExe = Join-Path $NodeDir "node.exe"
-  Assert-RtlNode24 $NodeExe
-  Write-Host "node: $(& $NodeExe --version) (pinned)"
-}
+$NodeExe = Join-Path $NodeDir 'node.exe'
+Assert-RtlNode24 $NodeExe
+Write-Host "node: $(& $NodeExe --version) (pinned)"
 $NodeBin = Split-Path -Parent $NodeExe
 $env:PATH = "$NodeBin;$env:PATH"
 $Npm = Join-Path $NodeBin "npm.cmd"
@@ -110,33 +129,44 @@ Download-Verified $V.sqliteUrl $sqliteZip $V.sqliteSha256
 $sqliteDir = Join-Path $Deps "sqlite"
 if (-not (Test-Path (Join-Path $sqliteDir "sqlite3.c"))) {
   $tmp = Join-Path $Deps "sqlite.tmp"
-  if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+  Remove-RtlDependencyTree $tmp
   Expand-Archive -Path $sqliteZip -DestinationPath $tmp
-  Remove-Item -Recurse -Force $sqliteDir -ErrorAction SilentlyContinue
+  Remove-RtlDependencyTree $sqliteDir
   $source = Get-ChildItem -Directory $tmp | Select-Object -First 1
   if (-not $source) { throw "SQLite archive did not contain a source directory." }
-  Move-Item $source.FullName $sqliteDir
-  Remove-Item -Recurse -Force $tmp
+  $sqliteSource = [System.IO.Path]::GetFullPath($source.FullName)
+  if (-not $sqliteSource.StartsWith([System.IO.Path]::GetFullPath($tmp).TrimEnd('\') + '\',
+      [System.StringComparison]::OrdinalIgnoreCase)) { throw 'SQLite source escaped the extraction directory.' }
+  Move-Item -LiteralPath $sqliteSource -Destination $sqliteDir
+  Remove-RtlDependencyTree $tmp
 }
 
 $nlohmannDir = Join-Path $Deps "nlohmann"
 New-Item -ItemType Directory -Force -Path $nlohmannDir | Out-Null
 $jsonHeader = Join-Path $nlohmannDir "json.hpp"
 Download-Verified $V.nlohmannJsonUrl $jsonHeader $V.nlohmannJsonSha256
-$licenseUrl = "https://raw.githubusercontent.com/nlohmann/json/v$($V.nlohmannJsonVersion)/LICENSE.MIT"
 if (-not (Test-Path (Join-Path $nlohmannDir "LICENSE.MIT"))) {
-  try { Invoke-WebRequest -UseBasicParsing -Uri $licenseUrl -OutFile (Join-Path $nlohmannDir "LICENSE.MIT") } catch {}
+  Copy-Item -LiteralPath (Join-Path $Root 'third_party\licenses\nlohmann-json-LICENSE.MIT') `
+    -Destination (Join-Path $nlohmannDir 'LICENSE.MIT')
 }
 
 $slangSrc = Join-Path $Deps "slang-src"
 if (-not (Test-Path (Join-Path $slangSrc ".git"))) {
-  if (Test-Path $slangSrc) { Remove-Item -Recurse -Force $slangSrc }
+  Remove-RtlDependencyTree $slangSrc
   git init -q $slangSrc
+  if ($LASTEXITCODE -ne 0) { throw 'git init for slang failed.' }
   git -C $slangSrc remote add origin $V.slangRepository
+  if ($LASTEXITCODE -ne 0) { throw 'git remote setup for slang failed.' }
 }
-git -C $slangSrc cat-file -e "$($V.slangCommit)^{commit}" 2>$null
-if ($LASTEXITCODE -ne 0) {
-  git -C $slangSrc fetch --depth 1 origin $V.slangCommit
+$savedPreference = $ErrorActionPreference
+try {
+  # A missing local object is expected on first run, including PowerShell 5.1.
+  $ErrorActionPreference = 'Continue'
+  git -C $slangSrc cat-file -e "$($V.slangCommit)^{commit}" 2>$null
+  $hasSlangCommit = $LASTEXITCODE -eq 0
+} finally { $ErrorActionPreference = $savedPreference }
+if (-not $hasSlangCommit) {
+  git -C $slangSrc fetch --quiet --depth 1 origin $V.slangCommit
   if ($LASTEXITCODE -ne 0) { throw "git fetch for slang failed." }
 }
 git -C $slangSrc checkout -q --detach $V.slangCommit
@@ -150,7 +180,6 @@ $SlangCMake = Join-Path $SlangPrefix "lib\cmake\slang\slangConfig.cmake"
 $CC = if ($env:RTL_CC) { $env:RTL_CC } else { "cl" }
 $CXX = if ($env:RTL_CXX) { $env:RTL_CXX } else { "cl" }
 if (-not (Test-Path $SlangCMake)) {
-  Enter-RtlMsvcEnv
   if (-not (Get-Command $CC -ErrorAction SilentlyContinue) -or
       -not (Get-Command $CXX -ErrorAction SilentlyContinue)) {
     throw "Requested compiler not found after entering the VS shell: CC=$CC CXX=$CXX"
@@ -158,20 +187,20 @@ if (-not (Test-Path $SlangCMake)) {
   $SlangBuild = Join-Path $Root "build\slang-windows"
   $jobs = if ($env:RTL_BUILD_JOBS) { [int]$env:RTL_BUILD_JOBS } else { 4 }
   Write-Host "configure slang (CC=$CC CXX=$CXX)"
-  & cmake -S $slangSrc -B $SlangBuild -G Ninja `
-    -DCMAKE_BUILD_TYPE=Release `
-    -DCMAKE_INSTALL_PREFIX=$SlangPrefix `
-    -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
-    -DSLANG_INCLUDE_TESTS=OFF -DSLANG_INCLUDE_TOOLS=OFF `
-    -DSLANG_INCLUDE_DOCS=OFF -DSLANG_INCLUDE_PYLIB=OFF `
-    -DSLANG_INCLUDE_INSTALL=ON `
-    -DSLANG_USE_MIMALLOC=OFF -DSLANG_USE_SYSTEM_FMT=OFF `
-    -DSLANG_USE_SYSTEM_BOOST=OFF -DBUILD_SHARED_LIBS=OFF `
-    -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX
-  if ($LASTEXITCODE -ne 0) { throw "slang configure failed with exit code $LASTEXITCODE" }
+  Invoke-RtlCmake -ProjectRoot $Root -Arguments @(
+    '--fresh', '-S', $slangSrc, '-B', $SlangBuild, '-G', 'Ninja',
+    '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_TRY_COMPILE_CONFIGURATION=Release',
+    "-DCMAKE_INSTALL_PREFIX=$SlangPrefix",
+    '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
+    '-DSLANG_INCLUDE_TESTS=OFF', '-DSLANG_INCLUDE_TOOLS=OFF',
+    '-DSLANG_INCLUDE_DOCS=OFF', '-DSLANG_INCLUDE_PYLIB=OFF',
+    '-DSLANG_INCLUDE_INSTALL=ON',
+    '-DSLANG_USE_MIMALLOC=OFF', '-DSLANG_USE_SYSTEM_FMT=OFF',
+    '-DSLANG_USE_SYSTEM_BOOST=OFF', '-DBUILD_SHARED_LIBS=OFF',
+    "-DCMAKE_C_COMPILER=$CC", "-DCMAKE_CXX_COMPILER=$CXX"
+  )
   Write-Host "build slang -j$jobs"
-  & cmake --build $SlangBuild --target install --parallel $jobs
-  if ($LASTEXITCODE -ne 0) { throw "slang build failed with exit code $LASTEXITCODE" }
+  Invoke-RtlCmake -ProjectRoot $Root -Arguments @('--build', $SlangBuild, '--target', 'install', '--parallel', "$jobs")
   if (-not (Test-Path $SlangCMake)) {
     $SlangCMake = Join-Path $SlangPrefix "lib64\cmake\slang\slangConfig.cmake"
   }

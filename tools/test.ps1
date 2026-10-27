@@ -20,6 +20,7 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Deps = Join-Path $Root ".sandbox\deps"
 $V = Get-Content -Raw (Join-Path $Root "tools\deps\versions.json") | ConvertFrom-Json
 . (Join-Path $Root "tools\dev\msvc-env.ps1")
+Initialize-RtlWindowsPaths $Root
 
 $NodeExe = Join-Path (Join-Path $Deps "node-v$($V.nodeVersion)-win-x64") "node.exe"
 if (-not (Test-Path $NodeExe)) {
@@ -48,6 +49,14 @@ if ($LASTEXITCODE -ne 0) { throw "typecheck failed" }
 Write-Host "== contracts =="
 & $NodeExe "tests\contracts.mjs"
 if ($LASTEXITCODE -ne 0) { throw "contracts failed" }
+
+Write-Host "== worker lifecycle =="
+& $NodeExe "tests\worker-lifecycle.mjs"
+if ($LASTEXITCODE -ne 0) { throw "worker lifecycle failed" }
+
+Write-Host "== Windows long-path snapshot =="
+& $NodeExe "tests\windows-long-path.mjs"
+if ($LASTEXITCODE -ne 0) { throw "Windows long-path snapshot failed" }
 
 Write-Host "== integration =="
 & $NodeExe "tests\integration.mjs"

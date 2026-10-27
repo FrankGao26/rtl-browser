@@ -53,7 +53,7 @@ fi
 SLANG_COMMIT="$(node -p "require('$DEPS/deps.lock.json').slang.commit" 2>/dev/null || echo unknown)"
 
 echo "== configure native worker =="
-cmake -S native/index-worker -B build/index-worker -G Ninja \
+cmake --fresh -S native/index-worker -B build/index-worker -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER_LAUNCHER= \
   -DCMAKE_CXX_COMPILER_LAUNCHER= \
