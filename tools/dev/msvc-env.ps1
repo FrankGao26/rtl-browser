@@ -80,7 +80,10 @@ function Initialize-RtlWindowsPaths {
 
 function Invoke-RtlCmake {
   param([string]$ProjectRoot, [string[]]$Arguments)
-  $cmakeExe = (Get-Command cmake -CommandType Application -ErrorAction Stop).Source
+  # Hosted runners can have VS, standalone and Strawberry CMake on PATH.
+  # Select one executable in PATH order instead of passing an array to &.
+  $cmakeExe = (Get-Command cmake -CommandType Application -All -ErrorAction Stop |
+    Select-Object -First 1).Source
   $savedTemp = $env:TEMP
   $savedTmp = $env:TMP
   $savedTmpdir = $env:TMPDIR
