@@ -20,7 +20,12 @@ set -euo pipefail
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT"
 NODE_VER="$(sed -n 's/.*"nodeVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/tools/deps/versions.json" | head -1)"
-NODE_DIR="$ROOT/.sandbox/deps/node-v${NODE_VER}-linux-x64"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) NODE_PLATFORM=linux-x64 ;;
+  Darwin-arm64) NODE_PLATFORM=darwin-arm64 ;;
+  *) echo "unsupported platform: $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+esac
+NODE_DIR="$ROOT/.sandbox/deps/node-v${NODE_VER}-${NODE_PLATFORM}"
 if [[ -x "$NODE_DIR/bin/node" ]]; then
   export PATH="$NODE_DIR/bin:$PATH"
 fi
@@ -35,7 +40,6 @@ need() { command -v "$1" >/dev/null 2>&1 || { echo "missing required tool: $1" >
 need cmake
 need node
 need npm
-need sha256sum
 
 NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
 if (( NODE_MAJOR < 24 )); then

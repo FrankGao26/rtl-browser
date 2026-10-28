@@ -1,0 +1,99 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - 'examples/**'
+      - '.vscode/**'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'third_party/README.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - 'examples/**'
+      - '.vscode/**'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'third_party/README.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            os: ubuntu-24.04
+          - platform: Windows
+            os: windows-2025-vs2026
+          - platform: macOS ARM64
+            os: macos-latest
+    env:
+      RTL_BUILD_JOBS: '2'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      # Bootstrap installs the pinned Node.js and npm dependencies itself.
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build python3 curl unzip xz-utils
+
+      - name: Select macOS compiler
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          xcodebuild -version
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+
+      - name: Bootstrap dependencies (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash tools/deps/bootstrap.sh
+
+      - name: Build (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash tools/build.sh
+
+      - name: Bootstrap dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tools/deps/bootstrap.ps1
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tools/build.ps1
+
+      # Bash bootstrap redirects dependency build output to these files.
+      - name: Print bootstrap logs on failure
+        if: failure() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for log in .sandbox/evidence/slang-*.log .sandbox/evidence/npm-ci.log; do
+            echo "::group::$log"
+            tail -n 150 "$log"
+            echo "::endgroup::"
+          done

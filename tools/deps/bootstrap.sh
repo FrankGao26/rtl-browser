@@ -35,10 +35,15 @@ json_value() {
 }
 
 NODE_VER="$(json_value nodeVersion)"
-NODE_URL="$(json_value nodeLinuxX64Url)"
-NODE_SHA="$(json_value nodeLinuxX64Sha256)"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) NODE_PLATFORM=linux-x64; NODE_KEY=nodeLinuxX64 ;;
+  Darwin-arm64) NODE_PLATFORM=darwin-arm64; NODE_KEY=nodeDarwinArm64 ;;
+  *) echo "unsupported platform: $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+esac
+NODE_URL="$(json_value "${NODE_KEY}Url")"
+NODE_SHA="$(json_value "${NODE_KEY}Sha256")"
 NODE_ARCHIVE="$DEPS/$(basename "$NODE_URL")"
-NODE_DIR="$DEPS/node-v${NODE_VER}-linux-x64"
+NODE_DIR="$DEPS/node-v${NODE_VER}-${NODE_PLATFORM}"
 SQLITE_VER="$(json_value sqliteVersion)"
 SQLITE_URL="$(json_value sqliteUrl)"
 SQLITE_SHA="$(json_value sqliteSha256)"
@@ -51,9 +56,17 @@ SLANG_COMMIT="$(json_value slangCommit)"
 SLANG_REPO="$(json_value slangRepository)"
 JOBS="${RTL_BUILD_JOBS:-4}"
 
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
 verify_sha() {
   local file="$1" expected="$2" label="$3" actual
-  actual="$(sha256sum "$file" | awk '{print $1}')"
+  actual="$(sha256_file "$file")"
   if [[ "$actual" != "$expected" ]]; then
     echo "SHA-256 mismatch for $label: $actual" >&2
     exit 1
@@ -75,7 +88,7 @@ download() {
 
 download "$NODE_URL" "$NODE_ARCHIVE" "$NODE_SHA" "Node ${NODE_VER}"
 if [[ ! -x "$NODE_DIR/bin/node" ]]; then
-  tar -xJf "$NODE_ARCHIVE" -C "$DEPS"
+  tar -xf "$NODE_ARCHIVE" -C "$DEPS"
 fi
 export PATH="$NODE_DIR/bin:$PATH"
 "$NODE_DIR/bin/node" --version
@@ -160,11 +173,11 @@ fi
 cat >"$DEPS/deps.lock.json" <<EOF
 {
   "source": "tools/deps/versions.json",
-  "node": {"version": "$NODE_VER", "platform": "linux-x64", "sha256": "$NODE_SHA"},
+  "node": {"version": "$NODE_VER", "platform": "$NODE_PLATFORM", "sha256": "$NODE_SHA"},
   "sqlite": {"version": "$SQLITE_VER", "sha256": "$SQLITE_SHA"},
   "nlohmannJson": {"version": "$NLOHMANN_VER", "sha256": "$NLOHMANN_SHA"},
   "slang": {"commit": "$SLANG_COMMIT", "version": "$(json_value slangVersion)"},
-  "npmLock": "$(sha256sum "$ROOT/package-lock.json" | awk '{print $1}')"
+  "npmLock": "$(sha256_file "$ROOT/package-lock.json")"
 }
 EOF
 

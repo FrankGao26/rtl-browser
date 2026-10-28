@@ -24,7 +24,7 @@ RTL Browser 是一个本地运行的 WebUI RTL 浏览器。选择一个工程目
 | -------------- | -------------------------------------------- |
 | Linux x86_64   | 支持，已在 Ubuntu 24.04 WSL2 验证            |
 | Windows x86_64 | MSVC 路线的原生构建和 Windows 测试脚本已验证 |
-| macOS ARM64    | 后续阶段                                     |
+| macOS ARM64    | TODO                                         |
 
 当前只支持 64 位平台。Windows 构建需要较新的 MSVC/Clang：slang 12 要求 MSVC 14.50+/VS 2026 或 Clang 17+，不支持 MinGW。
 
@@ -82,6 +82,17 @@ cd rtl-browser
 ./tools/sandbox/rtl-bwrap --profile build --network offline -- ./tools/build.sh
 ./tools/sandbox/rtl-bwrap --profile test --network offline -- ./tools/test.sh
 ```
+
+### macOS ARM64
+
+CI 使用 `macos-latest` ARM64 镜像（当前为 macOS 26）及镜像默认的 Xcode，执行与 Linux 相同的依赖准备和构建脚本。macOS 本机构建需要较新的 Xcode / Apple Clang（支持 C++20）、CMake >= 3.28、Ninja、Python 3、Git，以及系统自带的 curl、tar、unzip 和 shasum。
+
+```bash
+./tools/deps/bootstrap.sh
+./tools/build.sh
+```
+
+当前 macOS 仅覆盖编译检查，尚未验证完整运行和 UI 测试；暂不支持 Intel Mac。
 
 ### Windows x64
 
